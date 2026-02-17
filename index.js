@@ -13,12 +13,12 @@ console.log('-------------------------');
 
 const shopify = shopifyApp({
   api: {
-    apiVersion: '2024-04', // Hardcoded compatible version
+    apiVersion: '2024-10', // Updated to latest stable
     apiKey: process.env.SHOPIFY_API_KEY,
     apiSecretKey: process.env.SHOPIFY_API_SECRET,
     scopes: process.env.SHOPIFY_API_SCOPES?.split(','),
     hostName: process.env.HOST?.replace(/https?:\/\//, ''),
-    isEmbeddedApp: true,
+    isEmbeddedApp: false, // Set to false to allow direct browser access
   },
   auth: {
     path: '/api/auth',
@@ -29,7 +29,17 @@ const shopify = shopifyApp({
   },
 });
 
-app.get('/api/auth', shopify.auth.begin());
+// Add a simple health check for Railway
+app.get('/', (req, res) => res.send('Meezy App is Live!'));
+
+app.get('/api/auth', (req, res, next) => {
+  const shop = req.query.shop;
+  if (!shop) {
+    return res.status(400).send('Missing shop parameter. URL should be: /api/auth?shop=storename.myshopify.com');
+  }
+  console.log('Initiating auth for shop:', shop);
+  next();
+}, shopify.auth.begin());
 app.get(
   '/api/auth/callback',
   shopify.auth.callback(),
