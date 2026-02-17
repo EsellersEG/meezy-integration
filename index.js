@@ -12,8 +12,12 @@ console.log('SHOPIFY_API_SECRET:', process.env.SHOPIFY_API_SECRET ? 'Present' : 
 console.log('APP_URL:', process.env.APP_URL || process.env.HOST);
 console.log('-------------------------');
 
-const appUrl = process.env.APP_URL || process.env.HOST || '';
-const appHost = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '');
+const appUrl = (process.env.APP_URL && process.env.APP_URL !== '0.0.0.0')
+  ? process.env.APP_URL
+  : (process.env.HOST !== '0.0.0.0' ? process.env.HOST : '');
+
+const appHost = appUrl?.replace(/https?:\/\//, '').replace(/\/$/, '');
+console.log('Using Redirect Host:', appHost);
 
 const shopify = shopifyApp({
   api: {
