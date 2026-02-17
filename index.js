@@ -11,14 +11,17 @@ console.log('SHOPIFY_API_SECRET:', process.env.SHOPIFY_API_SECRET ? 'Present' : 
 console.log('HOST:', process.env.HOST);
 console.log('-------------------------');
 
+const appHost = process.env.HOST?.replace(/https?:\/\//, '').replace(/\/$/, '');
+
 const shopify = shopifyApp({
   api: {
-    apiVersion: '2024-10', // Updated to latest stable
+    apiVersion: '2024-10',
     apiKey: process.env.SHOPIFY_API_KEY,
     apiSecretKey: process.env.SHOPIFY_API_SECRET,
-    scopes: process.env.SHOPIFY_API_SCOPES?.split(','),
-    hostName: process.env.HOST?.replace(/https?:\/\//, ''),
-    isEmbeddedApp: false, // Set to false to allow direct browser access
+    // Matching exactly what you have in the Dashboard now:
+    scopes: ['write_inventory', 'read_inventory', 'read_products', 'write_products'],
+    hostName: appHost,
+    isEmbeddedApp: false,
   },
   auth: {
     path: '/api/auth',
