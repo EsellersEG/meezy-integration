@@ -5,9 +5,15 @@ const { LATEST_API_VERSION } = require('@shopify/shopify-api');
 
 const app = express();
 
+console.log('--- Environment Check ---');
+console.log('SHOPIFY_API_KEY:', process.env.SHOPIFY_API_KEY ? 'Present' : 'MISSING');
+console.log('SHOPIFY_API_SECRET:', process.env.SHOPIFY_API_SECRET ? 'Present' : 'MISSING');
+console.log('HOST:', process.env.HOST);
+console.log('-------------------------');
+
 const shopify = shopifyApp({
   api: {
-    apiVersion: LATEST_API_VERSION,
+    apiVersion: '2024-04', // Hardcoded compatible version
     apiKey: process.env.SHOPIFY_API_KEY,
     apiSecretKey: process.env.SHOPIFY_API_SECRET,
     scopes: process.env.SHOPIFY_API_SCOPES?.split(','),
