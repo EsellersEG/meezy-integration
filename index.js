@@ -9,10 +9,11 @@ app.set('trust proxy', true); // CRITICAL: Fixes the 0.0.0.0 redirect issue on R
 console.log('--- Environment Check ---');
 console.log('SHOPIFY_API_KEY:', process.env.SHOPIFY_API_KEY ? 'Present' : 'MISSING');
 console.log('SHOPIFY_API_SECRET:', process.env.SHOPIFY_API_SECRET ? 'Present' : 'MISSING');
-console.log('HOST:', process.env.HOST);
+console.log('APP_URL:', process.env.APP_URL || process.env.HOST);
 console.log('-------------------------');
 
-const appHost = process.env.HOST?.replace(/https?:\/\//, '').replace(/\/$/, '');
+const appUrl = process.env.APP_URL || process.env.HOST || '';
+const appHost = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '');
 
 const shopify = shopifyApp({
   api: {
