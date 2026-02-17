@@ -4,6 +4,7 @@ const { shopifyApp } = require('@shopify/shopify-app-express');
 const { LATEST_API_VERSION } = require('@shopify/shopify-api');
 
 const app = express();
+app.set('trust proxy', true); // CRITICAL: Fixes the 0.0.0.0 redirect issue on Railway
 
 console.log('--- Environment Check ---');
 console.log('SHOPIFY_API_KEY:', process.env.SHOPIFY_API_KEY ? 'Present' : 'MISSING');
