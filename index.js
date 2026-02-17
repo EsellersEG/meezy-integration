@@ -8,8 +8,11 @@ const app = express();
 const shopify = shopifyApp({
   api: {
     apiVersion: LATEST_API_VERSION,
-    restResources: require('@shopify/shopify-api/rest/admin/2024-04'),
-    billing: undefined, // No billing for this custom app
+    apiKey: process.env.SHOPIFY_API_KEY,
+    apiSecretKey: process.env.SHOPIFY_API_SECRET,
+    scopes: process.env.SHOPIFY_API_SCOPES?.split(','),
+    hostName: process.env.HOST?.replace(/https?:\/\//, ''),
+    isEmbeddedApp: true,
   },
   auth: {
     path: '/api/auth',
@@ -29,7 +32,7 @@ app.get(
     const session = res.locals.shopify.session;
     console.log('Successfully authorized!', session.shop);
     console.log('Permanent Access Token:', session.accessToken);
-    
+
     res.send(`
       <html>
         <head><title>Meezy Integration App</title></head>
