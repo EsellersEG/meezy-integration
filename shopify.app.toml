@@ -1,10 +1,10 @@
 # Meezy Integration App Configuration
 
-client_id = ""
+client_id = "e7179eae51e91c988d334568d87f5875"
 name = "Meezy Integration App"
 handle = "meezy-integration-app"
 application_url = "https://meezy-integration.railway.app" # Placeholder for deployment
-embedded = true
+embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
