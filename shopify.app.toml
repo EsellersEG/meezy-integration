@@ -3,7 +3,7 @@
 client_id = "e7179eae51e91c988d334568d87f5875"
 name = "Meezy Integration App"
 handle = "meezy-integration-app"
-application_url = "https://meezy-integration.railway.app" # Placeholder for deployment
+application_url = "https://meezy-integration-production.up.railway.app"
 embedded = false
 
 [build]
@@ -14,5 +14,20 @@ scopes = "read_products,write_products,read_inventory,write_inventory,read_order
 
 [auth]
 redirect_urls = [
-  "https://meezy-integration.railway.app/api/auth/callback"
+  "https://meezy-integration-production.up.railway.app/api/auth/callback"
 ]
+
+[webhooks]
+api_version = "2025-01"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/redact"]
+  uri = "https://meezy-integration-production.up.railway.app/webhooks/customers/redact"
+
+  [[webhooks.subscriptions]]
+  topics = ["shop/redact"]
+  uri = "https://meezy-integration-production.up.railway.app/webhooks/shop/redact"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/data_request"]
+  uri = "https://meezy-integration-production.up.railway.app/webhooks/customers/data_request"

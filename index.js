@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const crypto = require('crypto');
 const { shopifyApp } = require('@shopify/shopify-app-express');
-const { LATEST_API_VERSION } = require('@shopify/shopify-api');
 
 const app = express();
 app.set('trust proxy', true); // CRITICAL: Fixes the 0.0.0.0 redirect issue on Railway
@@ -37,7 +37,24 @@ const shopify = shopifyApp({
   },
 });
 
-// Premium HTML Template for showing the token
+// ─── HMAC Verification Helper ───────────────────────────────────────────────
+// Verifies the x-shopify-hmac-sha256 header on incoming webhook requests.
+// Uses timing-safe comparison to prevent timing attacks.
+function verifyShopifyWebhook(req) {
+  const hmac = req.headers['x-shopify-hmac-sha256'];
+  if (!hmac) return false;
+  const hash = crypto
+    .createHmac('sha256', process.env.SHOPIFY_API_SECRET)
+    .update(req.body)
+    .digest('base64');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(hmac));
+  } catch {
+    return false;
+  }
+}
+
+// ─── Premium HTML Template ───────────────────────────────────────────────────
 const showTokenPage = (shop, token) => `
 <!DOCTYPE html>
 <html lang="en">
@@ -78,11 +95,7 @@ const showTokenPage = (shop, token) => `
             border: 1px solid rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
         }
-        .icon {
-            font-size: 48px;
-            margin-bottom: 20px;
-            display: block;
-        }
+        .icon { font-size: 48px; margin-bottom: 20px; display: block; }
         h1 {
             font-size: 28px;
             font-weight: 600;
@@ -91,11 +104,7 @@ const showTokenPage = (shop, token) => `
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        p {
-            color: var(--text-muted);
-            margin-bottom: 30px;
-            font-size: 16px;
-        }
+        p { color: var(--text-muted); margin-bottom: 30px; font-size: 16px; }
         .shop-badge {
             display: inline-block;
             background: rgba(99, 102, 241, 0.1);
@@ -130,11 +139,7 @@ const showTokenPage = (shop, token) => `
             font-size: 14px;
             line-height: 1.5;
         }
-        .footer-note {
-            font-size: 13px;
-            color: var(--text-muted);
-            line-height: 1.6;
-        }
+        .footer-note { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
         .highlight { color: var(--primary); font-weight: 600; }
     </style>
 </head>
@@ -143,12 +148,10 @@ const showTokenPage = (shop, token) => `
         <span class="icon">✅</span>
         <h1>Connection Successful</h1>
         <div class="shop-badge">${shop}</div>
-        
         <div class="token-box">
             <div class="token-label">Permanent Admin Access Token</div>
             <code>${token}</code>
         </div>
-        
         <p class="footer-note">
             Copy this token and paste it into your <span class="highlight">Meezy App Script</span>.<br>
             This is a permanent token and will not expire.
@@ -158,20 +161,33 @@ const showTokenPage = (shop, token) => `
 </html>
 `;
 
-// Root route: Show token if authenticated, otherwise basic health check
+// ─── Root Route ──────────────────────────────────────────────────────────────
+// FIX: When Shopify visits the app URL with install params (shop + hmac),
+// we MUST redirect to /api/auth to start the OAuth flow.
+// Without this redirect, the "Immediately authenticates after install" check fails.
 app.get('/', async (req, res) => {
-  const shop = req.query.shop;
+  const { shop, hmac, host } = req.query;
+
+  if (shop && hmac) {
+    // Shopify is sending the merchant to install the app — initiate OAuth
+    const params = new URLSearchParams({ shop });
+    if (host) params.append('host', host);
+    return res.redirect(`/api/auth?${params.toString()}`);
+  }
+
+  // Show the token if already authenticated with this shop
   if (shop) {
-    // Look for existing session in memory
     const sessions = await shopify.config.sessionStorage.findSessionsByShop(shop);
     if (sessions.length > 0) {
       console.log('Returning stored token for', shop);
       return res.send(showTokenPage(shop, sessions[0].accessToken));
     }
   }
-  res.send('<h1>Meezy App is Live!</h1><p>Please use the installation link provided.</p>');
+
+  res.send('<h1>Meezy App is Live!</h1><p>Please access this app through your Shopify Admin.</p>');
 });
 
+// ─── Auth Routes ─────────────────────────────────────────────────────────────
 app.get('/api/auth', (req, res, next) => {
   const shop = req.query.shop;
   if (!shop) {
@@ -188,11 +204,55 @@ app.get(
     const session = res.locals.shopify.session;
     console.log('Successfully authorized!', session.shop);
     console.log('Permanent Access Token generated.');
-
     res.send(showTokenPage(session.shop, session.accessToken));
   }
 );
 
+// ─── Mandatory GDPR Compliance Webhooks ──────────────────────────────────────
+// Shopify REQUIRES these three endpoints for all apps in the App Store.
+// Each endpoint MUST verify the x-shopify-hmac-sha256 signature.
+// express.raw() is used so req.body is a Buffer for HMAC calculation.
+
+app.post('/webhooks/customers/redact',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    if (!verifyShopifyWebhook(req)) {
+      console.warn('[Webhook] customers/redact: Invalid HMAC — rejected');
+      return res.status(401).send('Unauthorized');
+    }
+    console.log('[Webhook] customers/redact received');
+    // TODO: Delete customer data from your systems
+    res.status(200).send('OK');
+  }
+);
+
+app.post('/webhooks/shop/redact',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    if (!verifyShopifyWebhook(req)) {
+      console.warn('[Webhook] shop/redact: Invalid HMAC — rejected');
+      return res.status(401).send('Unauthorized');
+    }
+    console.log('[Webhook] shop/redact received');
+    // TODO: Delete all shop data from your systems
+    res.status(200).send('OK');
+  }
+);
+
+app.post('/webhooks/customers/data_request',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    if (!verifyShopifyWebhook(req)) {
+      console.warn('[Webhook] customers/data_request: Invalid HMAC — rejected');
+      return res.status(401).send('Unauthorized');
+    }
+    console.log('[Webhook] customers/data_request received');
+    // TODO: Return customer data from your systems
+    res.status(200).send('OK');
+  }
+);
+
+// ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(shopify.cspHeaders());
 app.use(express.json());
 
