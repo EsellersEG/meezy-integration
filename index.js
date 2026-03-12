@@ -21,7 +21,7 @@ console.log('Using Redirect Host:', appHost);
 
 const shopify = shopifyApp({
   api: {
-    apiVersion: LATEST_API_VERSION,
+    apiVersion: '2025-01',
     apiKey: process.env.SHOPIFY_API_KEY,
     apiSecretKey: process.env.SHOPIFY_API_SECRET,
     scopes: ['read_products', 'write_products', 'read_inventory', 'write_inventory', 'read_orders'],
