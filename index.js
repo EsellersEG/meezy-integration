@@ -161,6 +161,98 @@ const showTokenPage = (shop, token) => `
 </html>
 `;
 
+// ─── Install HTML Template ─────────────────────────────────────────────────────
+const showInstallPage = () => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meezy Integration | Install</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #22d3ee;
+        }
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        p { color: var(--text-muted); margin-bottom: 30px; font-size: 16px; }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #000;
+            color: var(--text-main);
+            font-size: 16px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.3s;
+            font-family: 'Outfit', sans-serif;
+        }
+        button:hover {
+            background: var(--primary-dark);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Connect to Meezy</h1>
+        <p>Enter your Shopify store domain to authorize the app and generate your access token.</p>
+        <form action="/api/auth" method="GET">
+            <input type="text" name="shop" placeholder="e.g. your-store.myshopify.com" required>
+            <button type="submit">Connect Store</button>
+        </form>
+    </div>
+</body>
+</html>
+`;
+
 // ─── Root Route ──────────────────────────────────────────────────────────────
 // FIX: When Shopify visits the app URL with install params (shop + hmac),
 // we MUST redirect to /api/auth to start the OAuth flow.
@@ -184,7 +276,7 @@ app.get('/', async (req, res) => {
     }
   }
 
-  res.send('<h1>Meezy App is Live!</h1><p>Please access this app through your Shopify Admin.</p>');
+  res.send(showInstallPage());
 });
 
 // ─── Auth Routes ─────────────────────────────────────────────────────────────

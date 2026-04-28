@@ -20,14 +20,7 @@ redirect_urls = [
 [webhooks]
 api_version = "2025-01"
 
-  [[webhooks.subscriptions]]
-  topics = ["customers/redact"]
-  uri = "https://meezy-integration-production.up.railway.app/webhooks/customers/redact"
-
-  [[webhooks.subscriptions]]
-  topics = ["shop/redact"]
-  uri = "https://meezy-integration-production.up.railway.app/webhooks/shop/redact"
-
-  [[webhooks.subscriptions]]
-  topics = ["customers/data_request"]
-  uri = "https://meezy-integration-production.up.railway.app/webhooks/customers/data_request"
+  [webhooks.privacy_compliance]
+  customer_deletion_url = "https://meezy-integration-production.up.railway.app/webhooks/customers/redact"
+  customer_data_request_url = "https://meezy-integration-production.up.railway.app/webhooks/customers/data_request"
+  shop_deletion_url = "https://meezy-integration-production.up.railway.app/webhooks/shop/redact"
