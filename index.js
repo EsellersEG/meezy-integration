@@ -33,7 +33,7 @@ const shopify = shopifyApp({
     apiSecretKey: process.env.SHOPIFY_API_SECRET,
     scopes: ['read_products', 'write_products', 'read_inventory', 'write_inventory', 'read_orders'],
     hostName: appHost,
-    isEmbeddedApp: false,
+    isEmbeddedApp: true,
   },
   auth: {
     path: '/api/auth',
@@ -62,201 +62,78 @@ function verifyShopifyWebhook(req) {
   }
 }
 
-// ─── Premium HTML Template ───────────────────────────────────────────────────
-const showSuccessPage = (shop) => `
+// ─── Embedded App Dashboard ──────────────────────────────────────────────────
+// This page loads inside the Shopify Admin iframe and uses App Bridge.
+const showEmbeddedDashboard = (shop) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meezy Integration | Success</title>
+    <title>Meezy Integration</title>
+    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+            data-api-key="${process.env.SHOPIFY_API_KEY}"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --bg: #0f172a;
-            --card-bg: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent: #22d3ee;
-        }
         body {
             font-family: 'Outfit', sans-serif;
-            background-color: var(--bg);
-            color: var(--text-main);
+            background: #f6f6f7;
             display: flex;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
             margin: 0;
             padding: 20px;
+            box-sizing: border-box;
         }
         .card {
-            background: var(--card-bg);
-            padding: 40px;
-            border-radius: 24px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            max-width: 500px;
+            background: #fff;
+            padding: 48px 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            max-width: 480px;
             width: 100%;
             text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
         }
-        .icon { font-size: 48px; margin-bottom: 20px; display: block; }
-        h1 {
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            background: linear-gradient(to right, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        p { color: var(--text-muted); margin-bottom: 30px; font-size: 16px; }
-        .shop-badge {
+        .icon { font-size: 52px; margin-bottom: 16px; display: block; }
+        h1 { font-size: 24px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
+        .badge {
             display: inline-block;
-            background: rgba(99, 102, 241, 0.1);
-            color: var(--accent);
-            padding: 4px 12px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 4px 14px;
             border-radius: 999px;
-            font-size: 14px;
-            margin-bottom: 24px;
-            border: 1px solid rgba(34, 211, 238, 0.2);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
         }
-        .footer-note { font-size: 15px; color: var(--text-muted); line-height: 1.6; }
-        .highlight { color: var(--primary); font-weight: 600; }
+        p { color: #6b7280; font-size: 15px; line-height: 1.6; }
     </style>
 </head>
 <body>
     <div class="card">
         <span class="icon">✅</span>
-        <h1>Connection Successful</h1>
-        <div class="shop-badge">${shop}</div>
-        <p class="footer-note">
-            Your store has been securely connected to Meezy.<br><br>
-            <span class="highlight">You can now close this window and return to your dashboard.</span>
+        <h1>Connected to Meezy</h1>
+        <div class="badge">Active</div>
+        <p>
+            Your store <strong>${shop}</strong> is securely connected.<br>
+            Meezy has the permissions it needs to sync your store data.
         </p>
     </div>
 </body>
 </html>
 `;
 
-// ─── Install HTML Template ─────────────────────────────────────────────────────
-const showInstallPage = () => `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meezy Integration | Install</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --bg: #0f172a;
-            --card-bg: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent: #22d3ee;
-        }
-        body {
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg);
-            color: var(--text-main);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        .card {
-            background: var(--card-bg);
-            padding: 40px;
-            border-radius: 24px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            max-width: 500px;
-            width: 100%;
-            text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-        }
-        h1 {
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            background: linear-gradient(to right, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        p { color: var(--text-muted); margin-bottom: 30px; font-size: 16px; }
-        input[type="text"] {
-            width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            background: #000;
-            color: var(--text-main);
-            font-size: 16px;
-            margin-bottom: 20px;
-            box-sizing: border-box;
-        }
-        button {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            width: 100%;
-            transition: background 0.3s;
-            font-family: 'Outfit', sans-serif;
-        }
-        button:hover {
-            background: var(--primary-dark);
-        }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>Connect to Meezy</h1>
-        <p>Enter your Shopify store domain to authorize the app and generate your access token.</p>
-        <form action="/api/auth" method="GET">
-            <input type="text" name="shop" placeholder="e.g. your-store.myshopify.com" required>
-            <button type="submit">Connect Store</button>
-        </form>
-    </div>
-</body>
-</html>
-`;
 
-// ─── Root Route ──────────────────────────────────────────────────────────────
-// FIX: When Shopify visits the app URL with install params (shop + hmac),
-// we MUST redirect to /api/auth to start the OAuth flow.
-// Without this redirect, the "Immediately authenticates after install" check fails.
-app.get('/', async (req, res) => {
-  const { shop, hmac, host } = req.query;
 
-  if (shop && hmac) {
-    // Shopify is sending the merchant to install the app — initiate OAuth
-    const params = new URLSearchParams({ shop });
-    if (host) params.append('host', host);
-    return res.redirect(`/api/auth?${params.toString()}`);
-  }
-
-  // Show the token if already authenticated with this shop
-  if (shop) {
-    const sessions = await shopify.config.sessionStorage.findSessionsByShop(shop);
-    if (sessions.length > 0 && sessions[0].accessToken) {
-      console.log('Store already authorized securely:', shop);
-      return res.send(showSuccessPage(shop));
-    }
-  }
-
-  res.send(showInstallPage());
+// ─── Root Route (Embedded App Entry Point) ───────────────────────────────────
+// ensureInstalledOnShop automatically:
+//   - Redirects to OAuth if the shop hasn't installed the app yet
+//   - Validates the session if already installed
+//   - Populates res.locals.shopify.session on success
+app.get('/', shopify.ensureInstalledOnShop(), (req, res) => {
+  const shop = res.locals.shopify?.session?.shop || req.query.shop;
+  res.send(showEmbeddedDashboard(shop));
 });
 
 // ─── Auth Routes ─────────────────────────────────────────────────────────────
@@ -273,10 +150,11 @@ app.get(
   '/api/auth/callback',
   shopify.auth.callback(),
   async (req, res) => {
-    const session = res.locals.shopify.session;
-    console.log('Successfully authorized!', session.shop);
-    console.log('Permanent Access Token automatically saved to database.');
-    res.send(showSuccessPage(session.shop));
+    const { shop } = res.locals.shopify.session;
+    const host = req.query.host;
+    console.log(`[Auth] Token saved for: ${shop}`);
+    // Redirect to the embedded app inside Shopify Admin
+    return res.redirect(`/?shop=${shop}&host=${host}`);
   }
 );
 

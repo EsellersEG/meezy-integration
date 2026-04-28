@@ -4,7 +4,7 @@ client_id = "e7179eae51e91c988d334568d87f5875"
 name = "Meezy Integration App"
 handle = "meezy-integration-app"
 application_url = "https://meezy-integration-production.up.railway.app"
-embedded = false
+embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
