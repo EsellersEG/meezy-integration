@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const crypto = require('crypto');
 const { shopifyApp } = require('@shopify/shopify-app-express');
+const { PostgreSQLSessionStorage } = require('@shopify/shopify-app-session-storage-postgresql');
 
 const app = express();
 app.set('trust proxy', true); // CRITICAL: Fixes the 0.0.0.0 redirect issue on Railway
@@ -10,6 +11,7 @@ console.log('--- Environment Check ---');
 console.log('SHOPIFY_API_KEY:', process.env.SHOPIFY_API_KEY ? 'Present' : 'MISSING');
 console.log('SHOPIFY_API_SECRET:', process.env.SHOPIFY_API_SECRET ? 'Present' : 'MISSING');
 console.log('APP_URL:', process.env.APP_URL || process.env.HOST);
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Present' : 'MISSING');
 console.log('-------------------------');
 
 const appUrl = (process.env.APP_URL && process.env.APP_URL !== '0.0.0.0')
@@ -18,6 +20,11 @@ const appUrl = (process.env.APP_URL && process.env.APP_URL !== '0.0.0.0')
 
 const appHost = appUrl?.replace(/https?:\/\//, '').replace(/\/$/, '');
 console.log('Using Redirect Host:', appHost);
+
+// PostgreSQL Storage init
+const storage = process.env.DATABASE_URL
+  ? new PostgreSQLSessionStorage(process.env.DATABASE_URL)
+  : undefined;
 
 const shopify = shopifyApp({
   api: {
@@ -35,6 +42,7 @@ const shopify = shopifyApp({
   webhooks: {
     path: '/api/webhooks',
   },
+  ...(storage ? { sessionStorage: storage } : {})
 });
 
 // ─── HMAC Verification Helper ───────────────────────────────────────────────
@@ -55,7 +63,7 @@ function verifyShopifyWebhook(req) {
 }
 
 // ─── Premium HTML Template ───────────────────────────────────────────────────
-const showTokenPage = (shop, token) => `
+const showSuccessPage = (shop) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -115,31 +123,7 @@ const showTokenPage = (shop, token) => `
             margin-bottom: 24px;
             border: 1px solid rgba(34, 211, 238, 0.2);
         }
-        .token-box {
-            position: relative;
-            background: #000;
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            text-align: left;
-            margin-bottom: 20px;
-        }
-        .token-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            letter-spacing: 0.05em;
-        }
-        code {
-            display: block;
-            word-break: break-all;
-            font-family: 'Courier New', monospace;
-            color: var(--accent);
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        .footer-note { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+        .footer-note { font-size: 15px; color: var(--text-muted); line-height: 1.6; }
         .highlight { color: var(--primary); font-weight: 600; }
     </style>
 </head>
@@ -148,13 +132,9 @@ const showTokenPage = (shop, token) => `
         <span class="icon">✅</span>
         <h1>Connection Successful</h1>
         <div class="shop-badge">${shop}</div>
-        <div class="token-box">
-            <div class="token-label">Permanent Admin Access Token</div>
-            <code>${token}</code>
-        </div>
         <p class="footer-note">
-            Copy this token and paste it into your <span class="highlight">Meezy App Script</span>.<br>
-            This is a permanent token and will not expire.
+            Your store has been securely connected to Meezy.<br><br>
+            <span class="highlight">You can now close this window and return to your dashboard.</span>
         </p>
     </div>
 </body>
@@ -270,9 +250,9 @@ app.get('/', async (req, res) => {
   // Show the token if already authenticated with this shop
   if (shop) {
     const sessions = await shopify.config.sessionStorage.findSessionsByShop(shop);
-    if (sessions.length > 0) {
-      console.log('Returning stored token for', shop);
-      return res.send(showTokenPage(shop, sessions[0].accessToken));
+    if (sessions.length > 0 && sessions[0].accessToken) {
+      console.log('Store already authorized securely:', shop);
+      return res.send(showSuccessPage(shop));
     }
   }
 
@@ -295,8 +275,8 @@ app.get(
   async (req, res) => {
     const session = res.locals.shopify.session;
     console.log('Successfully authorized!', session.shop);
-    console.log('Permanent Access Token generated.');
-    res.send(showTokenPage(session.shop, session.accessToken));
+    console.log('Permanent Access Token automatically saved to database.');
+    res.send(showSuccessPage(session.shop));
   }
 );
 
