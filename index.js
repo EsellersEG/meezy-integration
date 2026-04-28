@@ -3,6 +3,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { shopifyApp } = require('@shopify/shopify-app-express');
 const { PostgreSQLSessionStorage } = require('@shopify/shopify-app-session-storage-postgresql');
+const { GraphqlQueryError } = require('@shopify/shopify-api');
 
 const app = express();
 app.set('trust proxy', true); // CRITICAL: Fixes the 0.0.0.0 redirect issue on Railway
@@ -131,8 +132,82 @@ const showEmbeddedDashboard = (shop) => `
 //   - Redirects to OAuth if the shop hasn't installed the app yet
 //   - Validates the session if already installed
 //   - Populates res.locals.shopify.session on success
-app.get('/', shopify.ensureInstalledOnShop(), (req, res) => {
-  const shop = res.locals.shopify?.session?.shop || req.query.shop;
+app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
+  const session = res.locals.shopify.session;
+  const shop = session?.shop || req.query.shop;
+
+  // ─── Billing Check ────────────────────────────────────────────────────────
+  // Shopify requires all public apps to go through the Billing API.
+  // We offer a Free plan at $0. If the merchant has no active subscription,
+  // we create one and redirect them to the confirmation URL.
+  try {
+    const client = new shopify.api.clients.Graphql({ session });
+
+    // Check for an existing active subscription
+    const existingResponse = await client.request(`{
+      currentAppInstallation {
+        activeSubscriptions {
+          id
+          name
+          status
+        }
+      }
+    }`);
+
+    const activeSubscriptions =
+      existingResponse?.data?.currentAppInstallation?.activeSubscriptions ?? [];
+
+    if (activeSubscriptions.length === 0) {
+      // No active plan — create the free $0 subscription
+      const returnUrl = `https://${shop}/admin/apps/${process.env.SHOPIFY_API_KEY}`;
+      const createResponse = await client.request(
+        `mutation appSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean) {
+          appSubscriptionCreate(name: $name, lineItems: $lineItems, returnUrl: $returnUrl, test: $test) {
+            appSubscription { id status }
+            confirmationUrl
+            userErrors { field message }
+          }
+        }`,
+        {
+          variables: {
+            name: 'Meezy Free Plan',
+            returnUrl,
+            test: process.env.NODE_ENV !== 'production',
+            lineItems: [
+              {
+                plan: {
+                  appRecurringPricingDetails: {
+                    price: { amount: 0.0, currencyCode: 'USD' },
+                    interval: 'EVERY_30_DAYS',
+                  },
+                },
+              },
+            ],
+          },
+        }
+      );
+
+      const { confirmationUrl, userErrors } =
+        createResponse?.data?.appSubscriptionCreate ?? {};
+
+      if (userErrors?.length) {
+        console.error('[Billing] userErrors:', userErrors);
+      }
+
+      if (confirmationUrl) {
+        // Redirect merchant to Shopify's billing confirmation page
+        return res.redirect(confirmationUrl);
+      }
+    }
+  } catch (e) {
+    // Log but don't block the merchant — if billing check fails just show the dashboard
+    if (e instanceof GraphqlQueryError) {
+      console.error('[Billing] GraphQL error:', e.response);
+    } else {
+      console.error('[Billing] Unexpected error:', e.message);
+    }
+  }
+
   res.send(showEmbeddedDashboard(shop));
 });
 
