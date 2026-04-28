@@ -109,6 +109,21 @@ const showEmbeddedDashboard = (shop) => `
             margin-bottom: 20px;
         }
         p { color: #6b7280; font-size: 15px; line-height: 1.6; }
+        .btn {
+            display: inline-block;
+            margin-top: 20px;
+            background: #6366f1;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            font-family: 'Outfit', sans-serif;
+        }
+        .btn:hover { background: #4f46e5; }
     </style>
 </head>
 <body>
@@ -120,6 +135,70 @@ const showEmbeddedDashboard = (shop) => `
             Your store <strong>${shop}</strong> is securely connected.<br>
             Meezy has the permissions it needs to sync your store data.
         </p>
+    </div>
+</body>
+</html>
+`;
+
+// ─── Billing Declined Page ────────────────────────────────────────────────────
+const showBillingDeclinedPage = (shop, retryUrl) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meezy Integration | Approval Required</title>
+    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+            data-api-key="${process.env.SHOPIFY_API_KEY}"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #f6f6f7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .card {
+            background: #fff;
+            padding: 48px 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+        }
+        .icon { font-size: 52px; margin-bottom: 16px; display: block; }
+        h1 { font-size: 22px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
+        p { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
+        .btn {
+            display: inline-block;
+            background: #6366f1;
+            color: #fff;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            font-family: 'Outfit', sans-serif;
+        }
+        .btn:hover { background: #4f46e5; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="icon">⚠️</span>
+        <h1>Approval Required</h1>
+        <p>
+            To complete the setup of Meezy for <strong>${shop}</strong>,
+            you need to approve the <strong>free plan</strong> (£0/month).
+            No charges will ever be made.
+        </p>
+        <a class="btn" href="${retryUrl}">Approve Free Plan</a>
     </div>
 </body>
 </html>
@@ -140,6 +219,7 @@ app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
   // Shopify requires all public apps to go through the Billing API.
   // We offer a Free plan at $0. If the merchant has no active subscription,
   // we create one and redirect them to the confirmation URL.
+  // If they decline, we show a retry page — they cannot bypass billing.
   try {
     const client = new shopify.api.clients.Graphql({ session });
 
@@ -198,6 +278,12 @@ app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
         // Redirect merchant to Shopify's billing confirmation page
         return res.redirect(confirmationUrl);
       }
+
+      // confirmationUrl is null — merchant previously declined.
+      // Re-create the subscription and force them back to the approval page.
+      console.warn(`[Billing] No confirmationUrl returned for ${shop} — merchant likely declined. Showing retry page.`);
+      const retryUrl = `/?shop=${shop}&host=${req.query.host || ''}`;
+      return res.send(showBillingDeclinedPage(shop, retryUrl));
     }
   } catch (e) {
     // Log but don't block the merchant — if billing check fails just show the dashboard
