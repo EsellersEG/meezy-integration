@@ -234,14 +234,59 @@ const redirectToBillingPage = (confirmationUrl) => `
 </html>
 `;
 
+// ─── Exit-Iframe Route ───────────────────────────────────────────────────────
+// When ensureInstalledOnShop() needs to start OAuth from inside the Shopify
+// Admin iframe, it redirects to /exitiframe?redirectUri=...  This page uses
+// App Bridge to navigate the TOP-LEVEL window to the OAuth URL, breaking out
+// of the iframe (Shopify's OAuth page cannot load inside an iframe).
+app.get('/exitiframe', (req, res) => {
+  const { redirectUri, shop, host } = req.query;
+  if (!redirectUri) {
+    return res.status(400).send('Missing redirectUri');
+  }
+  // Only allow redirects to our own app or to Shopify domains
+  try {
+    const url = new URL(redirectUri);
+    const allowed = url.hostname === appHost
+      || url.hostname.endsWith('.myshopify.com')
+      || url.hostname.endsWith('.shopify.com');
+    if (!allowed) {
+      return res.status(400).send('Invalid redirectUri');
+    }
+  } catch {
+    return res.status(400).send('Invalid redirectUri');
+  }
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+          data-api-key="${process.env.SHOPIFY_API_KEY}"></script>
+</head>
+<body>
+  <script>
+    window.open(${JSON.stringify(redirectUri)}, '_top');
+  </script>
+</body>
+</html>
+  `);
+});
+
 // ─── Root Route (Embedded App Entry Point) ───────────────────────────────────
-// ensureInstalledOnShop automatically:
-//   - Redirects to OAuth if the shop hasn't installed the app yet
-//   - Validates the session if already installed
-//   - Populates res.locals.shopify.session on success
+// ensureInstalledOnShop checks if the app is installed for the shop.
+// NOTE: It does NOT set res.locals.shopify.session — we must load the offline
+// session ourselves from storage for any server-side API calls.
 app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
-  const session = res.locals.shopify.session;
-  const shop = session?.shop || req.query.shop;
+  const shop = shopify.api.utils.sanitizeShop(req.query.shop);
+  const sessionId = shopify.api.session.getOfflineId(shop);
+  const session = await shopify.config.sessionStorage.loadSession(sessionId);
+
+  if (!session) {
+    // App is installed (ensureInstalledOnShop passed) but session can't be
+    // loaded — show dashboard without billing check rather than crashing.
+    return res.send(showEmbeddedDashboard(shop));
+  }
 
   // ─── Billing Check ────────────────────────────────────────────────────────
   // Shopify requires all public apps to go through the Billing API.
@@ -249,7 +294,10 @@ app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
   // we create one and redirect them to the confirmation URL.
   // If they decline, we show a retry page — they cannot bypass billing.
   try {
-    const client = new shopify.api.clients.Graphql({ session });
+    const client = new shopify.api.clients.Graphql({
+      session,
+      apiVersion: '2025-01',
+    });
 
     // Check for an existing active subscription
     const existingResponse = await client.request(`{
