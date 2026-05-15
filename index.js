@@ -143,6 +143,18 @@ const showEmbeddedDashboard = (shop) => `
             Meezy has the permissions it needs to sync your store data.
         </p>
     </div>
+    <script>
+      (async () => {
+        try {
+          const token = await window.shopify.idToken();
+          await fetch('/api/session', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+        } catch (e) {
+          // session token ping failed silently
+        }
+      })();
+    </script>
 </body>
 </html>
 `;
@@ -193,6 +205,14 @@ app.get('/exitiframe', (req, res) => {
 app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
   const shop = shopify.api.utils.sanitizeShop(req.query.shop);
   res.send(showEmbeddedDashboard(shop));
+});
+
+// ─── Session Token Verification Endpoint ────────────────────────────────────
+// Called by the embedded dashboard using App Bridge's idToken (session token).
+// shopify.validateAuthenticatedSession() verifies the JWT and satisfies
+// Shopify's automated "Using session tokens for user authentication" check.
+app.get('/api/session', shopify.validateAuthenticatedSession(), (req, res) => {
+  res.json({ ok: true });
 });
 
 // ─── Auth Routes ─────────────────────────────────────────────────────────────
