@@ -46,6 +46,13 @@ const shopify = shopifyApp({
   ...(storage ? { sessionStorage: storage } : {})
 });
 
+// ─── Middleware ───────────────────────────────────────────────────────────────
+// MUST be registered BEFORE routes so that CSP frame-ancestors headers are sent
+// on every response. Without shopify.cspHeaders() here, Shopify Admin's browser
+// blocks the iframe load and enters a redirect loop.
+app.use(shopify.cspHeaders());
+app.use(express.json());
+
 // ─── HMAC Verification Helper ───────────────────────────────────────────────
 // Verifies the x-shopify-hmac-sha256 header on incoming webhook requests.
 // Uses timing-safe comparison to prevent timing attacks.
@@ -206,6 +213,27 @@ const showBillingDeclinedPage = (shop, retryUrl) => `
 
 
 
+// ─── Billing Top-Level Redirect ──────────────────────────────────────────────
+// Shopify's billing confirmation page cannot be loaded inside an iframe, so a
+// plain res.redirect() only moves the iframe — the subscription stays PENDING
+// and the app redirects again on every reload, creating a loop.
+// This page uses window.top to break out of the iframe before navigating.
+const redirectToBillingPage = (confirmationUrl) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+          data-api-key="${process.env.SHOPIFY_API_KEY}"></script>
+</head>
+<body>
+  <script>
+    window.top.location.href = ${JSON.stringify(confirmationUrl)};
+  </script>
+</body>
+</html>
+`;
+
 // ─── Root Route (Embedded App Entry Point) ───────────────────────────────────
 // ensureInstalledOnShop automatically:
 //   - Redirects to OAuth if the shop hasn't installed the app yet
@@ -275,15 +303,17 @@ app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
       }
 
       if (confirmationUrl) {
-        // Redirect merchant to Shopify's billing confirmation page
-        return res.redirect(confirmationUrl);
+        // Use window.top redirect — a plain res.redirect() would only move the
+        // iframe; Shopify's billing page blocks iframing (X-Frame-Options) so
+        // the subscription stays PENDING and the app loops on every reload.
+        return res.send(redirectToBillingPage(confirmationUrl));
       }
 
-      // confirmationUrl is null — merchant previously declined.
-      // Re-create the subscription and force them back to the approval page.
-      console.warn(`[Billing] No confirmationUrl returned for ${shop} — merchant likely declined. Showing retry page.`);
-      const retryUrl = `/?shop=${shop}&host=${req.query.host || ''}`;
-      return res.send(showBillingDeclinedPage(shop, retryUrl));
+      // confirmationUrl is null — either the merchant previously declined, or
+      // the $0 plan was auto-confirmed, or a PENDING subscription already exists.
+      // Do NOT redirect back to '/' here — that is the redirect loop.
+      // Log the situation and fall through to show the dashboard.
+      console.warn(`[Billing] No confirmationUrl for ${shop} — userErrors: ${JSON.stringify(userErrors)}. Proceeding to dashboard.`);
     }
   } catch (e) {
     // Log but don't block the merchant — if billing check fails just show the dashboard
@@ -310,13 +340,7 @@ app.get('/api/auth', (req, res, next) => {
 app.get(
   '/api/auth/callback',
   shopify.auth.callback(),
-  async (req, res) => {
-    const { shop } = res.locals.shopify.session;
-    const host = req.query.host;
-    console.log(`[Auth] Token saved for: ${shop}`);
-    // Redirect to the embedded app inside Shopify Admin
-    return res.redirect(`/?shop=${shop}&host=${host}`);
-  }
+  shopify.redirectToShopifyOrAppRoot()
 );
 
 // ─── Mandatory GDPR Compliance Webhooks ──────────────────────────────────────
@@ -364,8 +388,7 @@ app.post('/webhooks/customers/data_request',
 );
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(shopify.cspHeaders());
-app.use(express.json());
+// (Registered early — see top of file, after shopify init)
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
