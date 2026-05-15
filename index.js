@@ -3,7 +3,6 @@ const express = require('express');
 const crypto = require('crypto');
 const { shopifyApp } = require('@shopify/shopify-app-express');
 const { PostgreSQLSessionStorage } = require('@shopify/shopify-app-session-storage-postgresql');
-const { GraphqlQueryError } = require('@shopify/shopify-api');
 
 const app = express();
 app.set('trust proxy', true); // CRITICAL: Fixes the 0.0.0.0 redirect issue on Railway
@@ -33,6 +32,7 @@ const shopify = shopifyApp({
     apiKey: process.env.SHOPIFY_API_KEY,
     apiSecretKey: process.env.SHOPIFY_API_SECRET,
     scopes: ['read_products', 'write_products', 'read_inventory', 'write_inventory', 'read_orders'],
+    hostScheme: 'https',
     hostName: appHost,
     isEmbeddedApp: true,
   },
@@ -147,93 +147,6 @@ const showEmbeddedDashboard = (shop) => `
 </html>
 `;
 
-// ─── Billing Declined Page ────────────────────────────────────────────────────
-const showBillingDeclinedPage = (shop, retryUrl) => `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meezy Integration | Approval Required</title>
-    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
-            data-api-key="${process.env.SHOPIFY_API_KEY}"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Outfit', sans-serif;
-            background: #f6f6f7;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .card {
-            background: #fff;
-            padding: 48px 40px;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-            max-width: 480px;
-            width: 100%;
-            text-align: center;
-        }
-        .icon { font-size: 52px; margin-bottom: 16px; display: block; }
-        h1 { font-size: 22px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
-        p { color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
-        .btn {
-            display: inline-block;
-            background: #6366f1;
-            color: #fff;
-            padding: 12px 28px;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 600;
-            text-decoration: none;
-            font-family: 'Outfit', sans-serif;
-        }
-        .btn:hover { background: #4f46e5; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <span class="icon">⚠️</span>
-        <h1>Approval Required</h1>
-        <p>
-            To complete the setup of Meezy for <strong>${shop}</strong>,
-            you need to approve the <strong>free plan</strong> (£0/month).
-            No charges will ever be made.
-        </p>
-        <a class="btn" href="${retryUrl}">Approve Free Plan</a>
-    </div>
-</body>
-</html>
-`;
-
-
-
-// ─── Billing Top-Level Redirect ──────────────────────────────────────────────
-// Shopify's billing confirmation page cannot be loaded inside an iframe, so a
-// plain res.redirect() only moves the iframe — the subscription stays PENDING
-// and the app redirects again on every reload, creating a loop.
-// This page uses window.top to break out of the iframe before navigating.
-const redirectToBillingPage = (confirmationUrl) => `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
-          data-api-key="${process.env.SHOPIFY_API_KEY}"></script>
-</head>
-<body>
-  <script>
-    window.top.location.href = ${JSON.stringify(confirmationUrl)};
-  </script>
-</body>
-</html>
-`;
-
 // ─── Exit-Iframe Route ───────────────────────────────────────────────────────
 // When ensureInstalledOnShop() needs to start OAuth from inside the Shopify
 // Admin iframe, it redirects to /exitiframe?redirectUri=...  This page uses
@@ -279,99 +192,6 @@ app.get('/exitiframe', (req, res) => {
 // session ourselves from storage for any server-side API calls.
 app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
   const shop = shopify.api.utils.sanitizeShop(req.query.shop);
-  const sessionId = shopify.api.session.getOfflineId(shop);
-  const session = await shopify.config.sessionStorage.loadSession(sessionId);
-
-  if (!session) {
-    // App is installed (ensureInstalledOnShop passed) but session can't be
-    // loaded — show dashboard without billing check rather than crashing.
-    return res.send(showEmbeddedDashboard(shop));
-  }
-
-  // ─── Billing Check ────────────────────────────────────────────────────────
-  // Shopify requires all public apps to go through the Billing API.
-  // We offer a Free plan at $0. If the merchant has no active subscription,
-  // we create one and redirect them to the confirmation URL.
-  // If they decline, we show a retry page — they cannot bypass billing.
-  try {
-    const client = new shopify.api.clients.Graphql({
-      session,
-      apiVersion: '2025-01',
-    });
-
-    // Check for an existing active subscription
-    const existingResponse = await client.request(`{
-      currentAppInstallation {
-        activeSubscriptions {
-          id
-          name
-          status
-        }
-      }
-    }`);
-
-    const activeSubscriptions =
-      existingResponse?.data?.currentAppInstallation?.activeSubscriptions ?? [];
-
-    if (activeSubscriptions.length === 0) {
-      // No active plan — create the free $0 subscription
-      const returnUrl = `https://${shop}/admin/apps/${process.env.SHOPIFY_API_KEY}`;
-      const createResponse = await client.request(
-        `mutation appSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean) {
-          appSubscriptionCreate(name: $name, lineItems: $lineItems, returnUrl: $returnUrl, test: $test) {
-            appSubscription { id status }
-            confirmationUrl
-            userErrors { field message }
-          }
-        }`,
-        {
-          variables: {
-            name: 'Meezy Free Plan',
-            returnUrl,
-            test: process.env.NODE_ENV !== 'production',
-            lineItems: [
-              {
-                plan: {
-                  appRecurringPricingDetails: {
-                    price: { amount: 0.0, currencyCode: 'USD' },
-                    interval: 'EVERY_30_DAYS',
-                  },
-                },
-              },
-            ],
-          },
-        }
-      );
-
-      const { confirmationUrl, userErrors } =
-        createResponse?.data?.appSubscriptionCreate ?? {};
-
-      if (userErrors?.length) {
-        console.error('[Billing] userErrors:', userErrors);
-      }
-
-      if (confirmationUrl) {
-        // Use window.top redirect — a plain res.redirect() would only move the
-        // iframe; Shopify's billing page blocks iframing (X-Frame-Options) so
-        // the subscription stays PENDING and the app loops on every reload.
-        return res.send(redirectToBillingPage(confirmationUrl));
-      }
-
-      // confirmationUrl is null — either the merchant previously declined, or
-      // the $0 plan was auto-confirmed, or a PENDING subscription already exists.
-      // Do NOT redirect back to '/' here — that is the redirect loop.
-      // Log the situation and fall through to show the dashboard.
-      console.warn(`[Billing] No confirmationUrl for ${shop} — userErrors: ${JSON.stringify(userErrors)}. Proceeding to dashboard.`);
-    }
-  } catch (e) {
-    // Log but don't block the merchant — if billing check fails just show the dashboard
-    if (e instanceof GraphqlQueryError) {
-      console.error('[Billing] GraphQL error:', e.response);
-    } else {
-      console.error('[Billing] Unexpected error:', e.message);
-    }
-  }
-
   res.send(showEmbeddedDashboard(shop));
 });
 
