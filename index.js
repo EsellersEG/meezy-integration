@@ -199,7 +199,7 @@ app.get('/', shopify.ensureInstalledOnShop(), async (req, res) => {
 app.get('/api/auth', (req, res, next) => {
   const shop = req.query.shop;
   if (!shop) {
-    return res.status(400).send('Missing shop parameter. URL should be: /api/auth?shop=storename.myshopify.com');
+    return res.status(400).send('Missing shop parameter.');
   }
   console.log('Initiating auth for shop:', shop);
   next();
