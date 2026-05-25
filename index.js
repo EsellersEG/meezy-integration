@@ -51,6 +51,48 @@ const shopify = shopifyApp({
 // on every response. Without shopify.cspHeaders() here, Shopify Admin's browser
 // blocks the iframe load and enters a redirect loop.
 app.use(shopify.cspHeaders());
+
+// ─── Mandatory GDPR Compliance Webhooks ──────────────────────────────────────
+// Shopify REQUIRES these three endpoints for all apps in the App Store.
+// Each endpoint MUST verify the x-shopify-hmac-sha256 signature.
+// Registered BEFORE express.json() so req.body remains a raw Buffer for HMAC.
+
+app.post('/webhooks/customers/redact',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    if (!verifyShopifyWebhook(req)) {
+      console.warn('[Webhook] customers/redact: Invalid HMAC — rejected');
+      return res.status(401).send('Unauthorized');
+    }
+    console.log('[Webhook] customers/redact received');
+    res.status(200).send('OK');
+  }
+);
+
+app.post('/webhooks/shop/redact',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    if (!verifyShopifyWebhook(req)) {
+      console.warn('[Webhook] shop/redact: Invalid HMAC — rejected');
+      return res.status(401).send('Unauthorized');
+    }
+    console.log('[Webhook] shop/redact received');
+    res.status(200).send('OK');
+  }
+);
+
+app.post('/webhooks/customers/data_request',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    if (!verifyShopifyWebhook(req)) {
+      console.warn('[Webhook] customers/data_request: Invalid HMAC — rejected');
+      return res.status(401).send('Unauthorized');
+    }
+    console.log('[Webhook] customers/data_request received');
+    res.status(200).send('OK');
+  }
+);
+
 app.use(express.json());
 
 // ─── HMAC Verification Helper ───────────────────────────────────────────────
@@ -229,50 +271,6 @@ app.get(
   '/api/auth/callback',
   shopify.auth.callback(),
   shopify.redirectToShopifyOrAppRoot()
-);
-
-// ─── Mandatory GDPR Compliance Webhooks ──────────────────────────────────────
-// Shopify REQUIRES these three endpoints for all apps in the App Store.
-// Each endpoint MUST verify the x-shopify-hmac-sha256 signature.
-// express.raw() is used so req.body is a Buffer for HMAC calculation.
-
-app.post('/webhooks/customers/redact',
-  express.raw({ type: 'application/json' }),
-  (req, res) => {
-    if (!verifyShopifyWebhook(req)) {
-      console.warn('[Webhook] customers/redact: Invalid HMAC — rejected');
-      return res.status(401).send('Unauthorized');
-    }
-    console.log('[Webhook] customers/redact received');
-    // TODO: Delete customer data from your systems
-    res.status(200).send('OK');
-  }
-);
-
-app.post('/webhooks/shop/redact',
-  express.raw({ type: 'application/json' }),
-  (req, res) => {
-    if (!verifyShopifyWebhook(req)) {
-      console.warn('[Webhook] shop/redact: Invalid HMAC — rejected');
-      return res.status(401).send('Unauthorized');
-    }
-    console.log('[Webhook] shop/redact received');
-    // TODO: Delete all shop data from your systems
-    res.status(200).send('OK');
-  }
-);
-
-app.post('/webhooks/customers/data_request',
-  express.raw({ type: 'application/json' }),
-  (req, res) => {
-    if (!verifyShopifyWebhook(req)) {
-      console.warn('[Webhook] customers/data_request: Invalid HMAC — rejected');
-      return res.status(401).send('Unauthorized');
-    }
-    console.log('[Webhook] customers/data_request received');
-    // TODO: Return customer data from your systems
-    res.status(200).send('OK');
-  }
 );
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
