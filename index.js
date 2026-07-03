@@ -304,7 +304,7 @@ const showEmbeddedDashboard = (shop) => `
 
             <div class="form-group">
                 <label for="webhook-url">Sync Status Webhook</label>
-                <input type="text" id="webhook-url" class="form-control" placeholder="https://yourdomain.com/webhook" value="https://meezy-integration-production.up.railway.app/webhooks/sync">
+                <input type="text" id="webhook-url" class="form-control" placeholder="https://yourdomain.com/webhook" value="https://${appHost}/webhooks/sync">
             </div>
 
             <div class="actions-group" style="flex-direction: row; gap: 8px;">
