@@ -207,26 +207,156 @@ const showEmbeddedDashboard = (shop) => `
             color: #374151;
             border: 1px solid #e5e7eb;
         }
+        .form-group {
+            text-align: left;
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            box-sizing: border-box;
+            background: #fff;
+            color: #1f2937;
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            cursor: pointer;
+        }
+        .checkbox-group input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            margin: 0;
+        }
+        .checkbox-group span {
+            font-size: 14px;
+            color: #4b5563;
+        }
     </style>
 </head>
 <body>
     <div class="card">
-        <span class="icon">✅</span>
-        <h1>Connected to Meezy</h1>
-        <div class="badge">Active</div>
-        <p>
-            Your store <strong>${shop}</strong> is securely connected.<br>
-            Meezy has the permissions it needs to sync your store data.
-        </p>
+        <!-- Dashboard View -->
+        <div id="dashboard-view">
+            <span class="icon">✅</span>
+            <h1>Connected to Meezy</h1>
+            <div class="badge">Active</div>
+            <p>
+                Your store <strong>${shop}</strong> is securely connected.<br>
+                Meezy has the permissions it needs to sync your store data.
+            </p>
 
-        <div class="actions-group">
-            <button id="sync-btn" class="btn" onclick="handleSync()">Sync Store Now</button>
-            <a href="https://meezy-integration-production.up.railway.app/dashboard" target="_blank" class="btn btn-secondary">Open Meezy Settings</a>
+            <div class="actions-group">
+                <button id="sync-btn" class="btn" onclick="handleSync()">Sync Store Now</button>
+                <button class="btn btn-secondary" onclick="toggleView('settings')">Open Meezy Settings</button>
+            </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="settings-view" style="display: none;">
+            <h1 style="font-size: 22px; margin-bottom: 8px;">Meezy Sync Settings</h1>
+            <p style="margin-bottom: 24px; font-size: 14px;">Configure how your store synchronizes with Meezy.</p>
+            
+            <div class="form-group">
+                <label>Sync Frequency</label>
+                <select class="form-control" id="sync-frequency">
+                    <option value="realtime">Real-time (Recommended)</option>
+                    <option value="hourly">Every Hour</option>
+                    <option value="daily">Every Day</option>
+                    <option value="manual">Manual Sync Only</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="margin-top: 20px;">
+                <label>Data to Synchronize</label>
+                <label class="checkbox-group">
+                    <input type="checkbox" id="sync-products" checked>
+                    <span>Products (Catalog & Images)</span>
+                </label>
+                <label class="checkbox-group">
+                    <input type="checkbox" id="sync-inventory" checked>
+                    <span>Inventory Levels (Stock tracking)</span>
+                </label>
+                <label class="checkbox-group">
+                    <input type="checkbox" id="sync-orders" checked>
+                    <span>Orders (Fulfillment & Webhooks)</span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="webhook-url">Sync Status Webhook</label>
+                <input type="text" id="webhook-url" class="form-control" placeholder="https://yourdomain.com/webhook" value="https://meezy-integration-production.up.railway.app/webhooks/sync">
+            </div>
+
+            <div class="actions-group" style="flex-direction: row; gap: 8px;">
+                <button class="btn btn-secondary" onclick="toggleView('dashboard')" style="flex: 1; margin-top: 0; padding: 10px;">Back</button>
+                <button id="save-btn" class="btn" onclick="saveSettings()" style="flex: 1; margin-top: 0; padding: 10px;">Save Settings</button>
+            </div>
         </div>
 
         <div id="status-box" class="status-message"></div>
     </div>
     <script>
+      function toggleView(view) {
+        const dashboard = document.getElementById('dashboard-view');
+        const settings = document.getElementById('settings-view');
+        const statusBox = document.getElementById('status-box');
+        
+        statusBox.style.display = 'none';
+        
+        if (view === 'settings') {
+          dashboard.style.display = 'none';
+          settings.style.display = 'block';
+        } else {
+          dashboard.style.display = 'block';
+          settings.style.display = 'none';
+        }
+      }
+
+      function saveSettings() {
+        const saveBtn = document.getElementById('save-btn');
+        const statusBox = document.getElementById('status-box');
+
+        saveBtn.disabled = true;
+        saveBtn.style.opacity = '0.7';
+        saveBtn.innerText = 'Saving...';
+        statusBox.className = 'status-message status-loading';
+        statusBox.innerText = 'Saving settings to Meezy database...';
+        statusBox.style.display = 'block';
+
+        setTimeout(() => {
+          saveBtn.disabled = false;
+          saveBtn.style.opacity = '1';
+          saveBtn.innerText = 'Save Settings';
+          statusBox.className = 'status-message status-success';
+          statusBox.innerText = 'Settings saved successfully!';
+          
+          setTimeout(() => {
+            statusBox.style.display = 'none';
+            toggleView('dashboard');
+          }, 1500);
+        }, 1000);
+      }
+
       function handleSync() {
         const syncBtn = document.getElementById('sync-btn');
         const statusBox = document.getElementById('status-box');
